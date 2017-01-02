@@ -22,6 +22,103 @@ MAX_FEATURES_BASIC = 1000
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s')
 logging.root.setLevel(level=logging.INFO)
 
+'''
+    generate features for initial unigrams
+'''
+def generate_features_initial_unigrams(train_features, test_features,
+                                       train_data=[], test_data=[],
+                                       max_features_init_unigrams=50,
+                                       ngram_range_init_unigrams=(1, 1)):
+    logging.log(logging.INFO, '\tpreparing initial unigram features')
+    uni_vectorizer = TfidfVectorizer(analyzer='word', tokenizer=None, preprocessor=None, stop_words=None,
+                                     max_features=max_features_init_unigrams, ngram_range=ngram_range_init_unigrams)
+
+    train_features_unig = uni_vectorizer.fit_transform(train_data)
+    train_features_unig = train_features_unig.toarray()
+    train_features = np.hstack((train_features, train_features_unig))
+
+    if len(test_data) > 0:
+        test_features_unig = uni_vectorizer.transform(test_data)
+        test_features_unig = test_features_unig.toarray()
+
+        test_features = np.hstack((test_features, test_features_unig))
+
+    return train_features, test_features
+
+
+'''
+    generate features from initial bigrams
+'''
+def generate_features_initial_bigrams(train_features, test_features,
+                                      train_data=[], test_data=[],
+                                      max_features_init_bigrams=50,
+                                      ngram_range_init_bigrams=(1, 1)):
+    logging.log(logging.INFO, '\tpreparing initial bigrams features')
+    big_vectorizer = TfidfVectorizer(analyzer='word', tokenizer=None, preprocessor=None, stop_words=None,
+                                     max_features=max_features_init_bigrams, ngram_range=ngram_range_init_bigrams)
+
+    bigram_features = big_vectorizer.fit_transform(train_data)
+    bigram_features = bigram_features.toarray()
+
+    train_features = np.hstack((train_features, bigram_features))
+
+    if len(test_data) > 0:
+        bigram_features_test = big_vectorizer.transform(test_data)
+        bigram_features_test = bigram_features_test.toarray()
+        test_features = np.hstack((test_features, bigram_features_test))
+
+    return (train_features, test_features)
+
+
+'''
+    create feature from tweet size (number of words)
+'''
+def generate_features_tweet_sizes(train_features, test_features,
+                                  train_data=[], test_data=[]):
+    logging.log(logging.INFO, '\tpreparing tweet size features')
+
+    train_features = np.hstack((train_features, train_data))
+
+    if len(test_data) > 0:
+        test_features = np.hstack((test_features, test_data))
+
+    return (train_features, test_features)
+
+
+
+
+def generate_features_cs_n_p(train_features, test_features, train_data=[], test_data=[]):
+    logging.log(logging.INFO, '\tpreparing cs_n_p features')
+    train_features = np.hstack((train_features, train_data))
+    if len(test_data) > 0:
+        test_features = np.hstack((test_features, test_data))
+
+    return (train_features, test_features)
+
+
+'''
+    generate features from initial trigrams
+'''
+def generate_features_initial_trigrams(train_features, test_features,
+                                       train_data=[], test_data=[],
+                                       max_features_init_trigrams=50,
+                                       ngram_range_init_trigrams=(1, 1)):
+    logging.log(logging.INFO, '\tpreparing initial trigram features')
+
+    trig_vectorizer = TfidfVectorizer(analyzer='word', tokenizer=None, preprocessor=None, stop_words=None,
+                                      max_features=max_features_init_trigrams, ngram_range=ngram_range_init_trigrams)
+
+    trigram_features_train = trig_vectorizer.fit_transform(train_data)
+    trigram_features_train = trigram_features_train.toarray()
+    train_features = np.hstack((train_features, trigram_features_train))
+
+    if len(test_data) > 0:
+        trigram_features_test = trig_vectorizer.transform(test_data)
+        trigram_features_test = trigram_features_test.toarray()
+        test_features = np.hstack((test_features, trigram_features_test))
+
+    return (train_features, test_features)
+
 
 
 
@@ -70,51 +167,30 @@ def generate_features_basic(train_data=[], test_data=[], max_features_basic=5000
         return (train_data_features, test_data_features, tfidf_vocab)
 
 
+
+
 def generate_all_features(train_data_features, test_data_features,
                           train_data_raw, test_data_raw,
                           cleaned_rows_training,
                           cleaned_rows_testing,
                           system_parameters):
-    return [], []
-
-
-'''
-def generate_all_features(train_data_features, test_data_features,
-                          train_data_raw, test_data_raw,
-                          cleaned_rows_training,
-                          cleaned_rows_testing,
-                          system_parameters):
-
-
-
-    if system_parameters['Features_hashtags']:
-        logging.log(logging.INFO, '\t\tadding features hashtags')
-        hashtags_training = Task6_raw_processing.preprocess_raw_data_hashtags(train_data_raw)
-        hashtags_testing  = Task6_raw_processing.preprocess_raw_data_hashtags(test_data_raw)
-
-        train_data_features, test_data_features = generate_features_hashtags(train_data_features, \
-                                                                             test_data_features, \
-                                                                             hashtags_training, \
-                                                                             hashtags_testing, \
-                                                                             max_features_hashtags = 50, \
-                                                                             ngram_range_hashtags=(1,2)
-                                                                                 )
 
 
     if system_parameters['Features_initial_unigrams']:
         logging.log(logging.INFO, '\t\tadding features initial unigrams')
         initial_unigrams_training = Task6_raw_processing.preprocess_raw_data_initial_unigrams(cleaned_rows_training)
-        initial_unigrams_testing  = Task6_raw_processing.preprocess_raw_data_initial_unigrams(cleaned_rows_testing)
+        initial_unigrams_testing = Task6_raw_processing.preprocess_raw_data_initial_unigrams(cleaned_rows_testing)
 
         train_data_features, test_data_features = generate_features_initial_unigrams(train_data_features,
                                                                                      test_data_features,
                                                                                      initial_unigrams_training,
                                                                                      initial_unigrams_testing
-                                                                                    )
+                                                                                     )
+
     if system_parameters['Features_initial_bigrams']:
         logging.log(logging.INFO, '\t\tadding initial bigrams')
         initial_bigrams_training = Task6_raw_processing.preprocess_raw_data_initial_bigrams(cleaned_rows_training)
-        initial_bigrams_testing  = Task6_raw_processing.preprocess_raw_data_initial_bigrams(cleaned_rows_testing)
+        initial_bigrams_testing = Task6_raw_processing.preprocess_raw_data_initial_bigrams(cleaned_rows_testing)
 
         train_data_features, test_data_features = generate_features_initial_bigrams(train_data_features,
                                                                                     test_data_features,
@@ -124,13 +200,46 @@ def generate_all_features(train_data_features, test_data_features,
     if system_parameters['Features_initial_trigrams']:
         logging.log(logging.INFO, '\t\tadding initial trigrams')
         initial_trigrams_training = Task6_raw_processing.preprocess_raw_data_initial_trigrams(cleaned_rows_training)
-        initial_trigrams_testing  = Task6_raw_processing.preprocess_raw_data_initial_trigrams(cleaned_rows_testing)
+        initial_trigrams_testing = Task6_raw_processing.preprocess_raw_data_initial_trigrams(cleaned_rows_testing)
 
         train_data_features, test_data_features = generate_features_initial_trigrams(train_data_features,
                                                                                      test_data_features,
                                                                                      initial_trigrams_training,
                                                                                      initial_trigrams_testing
                                                                                      )
+
+    if system_parameters['Features_tweet_sizes']:
+        logging.log(logging.INFO, '\tadding tweet sizes features')
+        tweet_sizes_training = Task6_raw_processing.preprocess_raw_data_tweet_sizes(cleaned_rows_training)
+        tweet_sizes_testing = Task6_raw_processing.preprocess_raw_data_tweet_sizes(cleaned_rows_testing)
+
+        train_data_features, test_data_features = generate_features_tweet_sizes(train_data_features,
+                                                                                test_data_features,
+                                                                                tweet_sizes_training,
+                                                                                tweet_sizes_testing)
+
+    if system_parameters['Features_pos_neg_dict']:
+        logging.log(logging.INFO, '\t\tadding features based on cs_n and cs_p dictionaries')
+
+        cs_n_p_training = Task6_raw_processing.preprocess_raw_data_cs_n_p(cleaned_rows_training)
+        cs_n_p_testing = Task6_raw_processing.preprocess_raw_data_cs_n_p(cleaned_rows_testing)
+
+        train_data_features, test_data_features = generate_features_cs_n_p(train_data_features,
+                                                                           test_data_features,
+                                                                           cs_n_p_training,
+                                                                           cs_n_p_testing)
+
+    return train_data_features, test_data_features
+
+
+
+
+
+
+
+'''NOT USED
+
+
     if system_parameters['Features_tweet_sentiment']:
         logging.log(logging.INFO, '\t\tadding tweet sentiment')
         tweet_sentiment_training = Task6_raw_processing.preprocess_raw_data_sentiment(cleaned_rows_training)
@@ -366,18 +475,6 @@ def generate_all_features(train_data_features, test_data_features,
 
 
 
-    if system_parameters['Features_tweet_sizes']:
-        logging.log(logging.INFO, '\tadding tweet sizes features')
-        tweet_sizes_training = Task6_raw_processing.preprocess_raw_data_tweet_sizes(cleaned_rows_training)
-        tweet_sizes_testing = Task6_raw_processing.preprocess_raw_data_tweet_sizes(cleaned_rows_testing)
-
-
-        train_data_features, test_data_features = generate_features_tweet_sizes(train_data_features,
-                                                                                test_data_features,
-                                                                                tweet_sizes_training,
-                                                                                tweet_sizes_testing)
-
-
 
 
 
@@ -413,34 +510,10 @@ def main():
         'Features_initial_bigrams': False,
         'Features_initial_trigrams': False,
         'Features_tweet_sizes': True,
-        'Features_tweet_sentiment': False,  # do not use
-        'Features_tweet_POS': False,
-        'Features_tweet_POS_percentage': False,
-        'GI_categories': False,
-    }
-
-
-
-    '''
-    system_parameters = {
-        'AdditionalData': 'ignore',  # ignore, load
-
-        'Topics': 'all_together',  # all_together, separate
-        'GenerateOutputFile': False,  # True, False
-
-        'UseOverrides': False,
-
-        'Features_SentiWord': False,  # TODO: features senti word
-        'Features_capitals_percentage': False,  # TODO : features capitals percentage
-        'Features_heurestics': False,  # TODO: features heuristics
-        'Features_bible_reference': False,  # READY
-        'Features_dsd': False,  # !!!!! need to change dictionary,
-        'Features_JRC': False,
-        'Features_dsd_additional': False,  # dictionary created from additionaly downloaded data
         'Features_pos_neg_dict': True,
-        'Features_w2v': False
     }
-    '''
+
+
 
 
 
@@ -515,7 +588,55 @@ def main():
             gnb.fit(train_data_features, train_data_raw['Stance'])
             result = gnb.predict(test_data_features)
 
+            if system_parameters['GenerateOutputFile']:
+                output = pd.DataFrame({'ID': raw_data_test['ID'], 'Stance': result, 'Tweet': raw_data_test['Tweet'],
+                                       'Target': raw_data_test['Target']})
+                output.to_csv(tail + '_OUTPUT.txt', sep='\t', columns=['ID', 'Target', 'Tweet', 'Stance'], index=False)
 
+            F1 = Task6_analysis.compute_f1(result, test_data_raw, display_partial=True)  # AVG F1 = 0.383664049579
+            F1b = Task6_analysis.compute_f1_extended(result, test_data_raw,
+                                                     display_partial=False)  # AVG F1 = 0.477409704484
+
+            F1s.append(F1)
+            F1bs.append(F1b)
+
+            logging.log(logging.INFO, '\tF1 = ' + str(F1))
+
+        logging.log(logging.INFO, '\tPartials f1s = ' + str(F1s))
+        logging.log(logging.INFO,
+                    '\tAVG F1 = ' + str(np.mean(F1s)) + ' MAX F1 = ' + str(max(F1s)) + ' MIN F1 = ' + str(min(F1s)))
+        logging.log(logging.INFO, '\tAVG F1(ex) = ' + str(np.mean(F1bs)))
+
+    elif system_parameters['RunMode'] == 'training_only':
+        logging.log(logging.INFO, 'running training only')
+        raw_data_test = Task6_raw_processing.load_official_test_data(Task6_file_links.official_test_data_subtaskA)
+        _, tail = os.path.split(Task6_file_links.official_test_data_subtaskA)
+        logging.log(logging.INFO, 'loading official test data from ' + tail)
+        cleaned_rows_training = Task6_raw_processing.preprocess_raw_data(raw_data)
+        cleaned_rows_testing = Task6_raw_processing.preprocess_raw_data(raw_data_test)
+        train_data_features, test_data_features, vocabulary = generate_features_basic(cleaned_rows_training, \
+                                                                                      cleaned_rows_testing, \
+                                                                                      max_features_basic=MAX_FEATURES_BASIC,
+                                                                                      # 750\
+                                                                                      ngram_range_basic=(1, 1))
+        logging.log(logging.INFO, 'train data features shape (basic) = ' + str(train_data_features.shape))
+        logging.log(logging.INFO, 'test data features shape (basic) = ' + str(test_data_features.shape))
+
+        train_data_features, test_data_features = generate_all_features(train_data_features, test_data_features,
+                                                                        raw_data, raw_data_test,
+                                                                        cleaned_rows_training, cleaned_rows_testing,
+                                                                        system_parameters
+                                                                        )
+        logging.log(logging.INFO, 'train data features shape (extended) = ' + str(train_data_features.shape))
+        logging.log(logging.INFO, 'test data features shape (extended) = ' + str(test_data_features.shape))
+        gnb = LogisticRegression(C=1.0, class_weight='balanced', n_jobs=-1)
+        gnb.fit(train_data_features, raw_data['Stance'])
+        result = gnb.predict(test_data_features)
+
+        if system_parameters['GenerateOutputFile']:
+            output = pd.DataFrame({'ID': raw_data_test['ID'], 'Stance': result, 'Tweet': raw_data_test['Tweet'],
+                                   'Target': raw_data_test['Target']})
+            output.to_csv(tail + '_OUTPUT.txt', sep='\t', columns=['ID', 'Target', 'Tweet', 'Stance'], index=False)
 
 
 if __name__ == "__main__":
