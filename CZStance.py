@@ -504,6 +504,7 @@ def main():
 
         'GenerateStatistics': False,
         'GenerateStatisticsCZ': False,
+        'GenerateOutputFile': False,  # True, False
 
         'Features_hashtags': False,
         'Features_initial_unigrams': True,
