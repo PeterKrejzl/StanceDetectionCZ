@@ -13,6 +13,7 @@ from keras.models import Sequential
 from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import LSTM
 from keras.layers.core import Dense, Dropout
+from keras.utils.np_utils import to_categorical
 
 import codecs
 
@@ -32,8 +33,20 @@ input_length = 100
 cpu_count = 16
 
 
-K_FOLD_VALIDATION_K = 10
+K_FOLD_VALIDATION_K = 3
 
+
+idnes_corpus = 'data/noentity.txt'
+'''
+je správné lít rum do kafe, nebo kafe do rumu...
+Ani jedno
+dost fašizující názor
+Rum nepiji a kafe také ne.
+jasně, samovar a vodka z vás je cítit...
+Ano, takhle mluví pražská natokavárna!
+Rum do žaludku a kafe na hnůj!
+...
+'''
 
 
 training_data_filename = 'data/koureni.txt'
@@ -42,6 +55,7 @@ training_data_filename = 'data/koureni.txt'
 801	ZÁKAZ KOUŘENÍ V RESTAURACÍCH	"K čemu všemu nás tady to přiblblé vedení státu (říká si to ""vláda"") ještě donutí?"	PROTI
 802	ZÁKAZ KOUŘENÍ V RESTAURACÍCH	Vcera kuraci nedostali v restauraci popelnik se slovy ze uz si maji pomalu zvykat a jit si zapalit na cerstvy vzduch  ;-D   R^   ani jeden z nich neodesel domu ci do vedlejsi restaurace  8-o	PRO
 806	ZÁKAZ KOUŘENÍ V RESTAURACÍCH	Máte dojem, že si v ČR mafie vydělají málo?	NIC
+...
 '''
 
 
@@ -49,19 +63,36 @@ training_data_filename = 'data/koureni.txt'
 need to convert training data to 6 different sets (trainin - testing - neu - for - against)
 '''
 
+
+model_name = 'w2vmodel/w2v.model'
+
+
 training_data = pd.read_csv(training_data_filename, delimiter='\t', header=None, names=['ID', 'TOPIC', 'TEXT', 'STANCE'])
 training_data = training_data.drop(labels={'TOPIC', 'ID'}, axis=1)
-#print(training_data)
 
+
+global_f1s_official = []
+global_f1s_extended = []
 
 
 def tokenize_data(text):
     text = [doc.lower().split(' ') for doc in text]
     return text
 
+def import_idnes_corpus(filename):
+    data = []
+    f = codecs.open(filename, encoding='utf-8')
+    for line in f:
+        data.append(line.lower())
+    f.close()
+    return data[0:5]
+
 
 def create_dictionaries(train, test, model):
+    print('Creating dictionaries')
     gensim_dict = Dictionary()
+    print(type(model))
+    print(type(gensim_dict))
     gensim_dict.doc2bow(model.vocab.keys(), allow_update=True)
     w2indx = {v: k+1 for k, v in gensim_dict.items()}
     w2vec = {word: model[word] for word in w2indx.keys()}
@@ -82,15 +113,114 @@ def create_dictionaries(train, test, model):
     return w2indx, w2vec, train, test
 
 
-def calculate_official_F1 (predictions, y_test):
+def calculate_F1 (predictions, y_test):
     '''
         PRO: 0+         y = 0   [1, 0, 0]
         PROTI: 10k+     y = 1   [0, 1, 0]
         NIC: 20k+       y = 2   [0, 0, 1]
     '''
+    merged = zip(predictions, y_test)
+    accuracy_oks = 0
+    total_train_favs = 0
+    total_train_ags = 0
+    total_train_nones = 0
+    total_test_favs = 0
+    total_test_ags = 0
+    total_test_nones = 0
+    tp_favs = 0
+    tp_ags = 0
+    tp_nones = 0
+
+    accuracy_oks = 0
+    accuracy_total_records = len(merged)
+
+    for row in merged:
+        if np.argmax(row[0]) == np.argmax(row[1]):
+            accuracy_oks +=1
+
+        if row[1][0] == 1.:
+            total_train_favs += 1
+            if np.argmax(row[0]) == 0:
+                tp_favs += 1
+        elif row[1][1] == 1.:
+            total_train_ags += 1
+            if np.argmax(row[0]) == 1:
+                tp_ags += 1
+        elif row[1][2] == 1.:
+            total_train_nones += 1
+            if np.argmax(row[0]) == 2:
+                tp_nones += 1
+
+        #print('Row = %s, argmax = %s' % (row[0], np.argmax(row[0])))
+        if np.argmax(row[0]) == 0:
+            total_test_favs += 1
+        elif np.argmax(row[0]) == 1:
+            total_test_ags += 1
+        elif np.argmax(row[0]) == 2:
+            total_test_nones += 1
+
+        if total_test_favs > 0:
+            precision_favs = tp_favs / float(total_test_favs)
+        else:
+            precision_favs = 0
+
+        if total_test_ags > 0:
+            precision_ags = tp_ags / float(total_test_ags)
+        else:
+            precision_ags = 0
+
+        if total_test_nones > 0:
+            precision_nones = tp_nones / float(total_test_nones)
+        else:
+            precision_nones = 0
+
+        if total_train_favs > 0:
+            recall_favs = tp_favs / float(total_train_favs)
+        else:
+            recall_favs = 0
+
+        if total_train_ags > 0:
+            recall_ags = tp_ags / float(total_train_ags)
+        else:
+            recall_ags = 0
+
+        if total_train_nones > 0:
+            recall_nones = tp_nones / float(total_train_nones)
+        else:
+            recall_nones = 0
+
+    if (precision_favs + recall_favs) > 0:
+        f1_favs = (2 * (precision_favs * recall_favs)) / float(precision_favs + recall_favs)
+    else:
+        f1_favs = 0
+
+    if (precision_ags + recall_ags) > 0:
+        f1_ags = (2 * (precision_ags * recall_ags)) / float(precision_ags + recall_ags)
+    else:
+        f1_ags = 0
+
+    if (precision_nones + recall_nones) > 0:
+        f1_nones = (2 * (precision_nones * recall_nones)) / float(precision_nones + recall_nones)
+    else:
+        f1_nones = 0
+
+    macro_F1 = (f1_ags + f1_favs + f1_nones) / 3.0
+
+    print('accuracy_oks = %s, total_train_favs = %s, total_train_ags = %s, total_train_nones = %s' \
+          % (accuracy_oks, total_train_favs, total_train_ags, total_train_nones))
+    print('total_test_favs = %s, total_test_ags = %s, total_test_nones = %s' % (
+    total_test_favs, total_test_ags, total_test_nones))
+    print('tp_favs = %s, tp_ags = %s, tp_nones = %s' % (tp_favs, tp_ags, tp_nones))
+
+    print('Macro F1 = %s' % macro_F1)
+
+    return macro_F1
 
 
-def calculate_F1 (predictions, y_test):
+
+
+
+def calculate_official_F1 (predictions, y_test):
     merged = zip(predictions, y_test)
     total_rows = 0
 
@@ -133,7 +263,7 @@ def calculate_F1 (predictions, y_test):
             if np.argmax(row[0]) == 2:
                 tp_nones += 1
 
-        print('Row = %s, argmax = %s' % (row[0], np.argmax(row[0])))
+        #print('Row = %s, argmax = %s' % (row[0], np.argmax(row[0])))
         if np.argmax(row[0]) == 0:
             total_test_favs += 1
         elif np.argmax(row[0]) == 1:
@@ -195,7 +325,29 @@ def calculate_F1 (predictions, y_test):
 
     print('Macro F1 = %s' % macro_F1)
 
-    quit()
+    return macro_F1
+
+
+
+
+
+idnes_data = import_idnes_corpus(idnes_corpus)
+data_for_w2v = list(training_data['TEXT'].drop_duplicates().values)
+data_for_w2v = [w.decode('utf-8') for w in data_for_w2v]
+data_for_w2v = tokenize_data(data_for_w2v)
+data_for_w2v += idnes_data
+
+
+print('Training data for w2v size = %s' % len(data_for_w2v))
+model = Word2Vec(size=vocab_dim, min_count=n_exposures, window=window_size, workers=8, iter=n_iterations)
+model.build_vocab(data_for_w2v)
+model.train(data_for_w2v)
+print('Model trained')
+
+model.save(model_name)
+print('Model saved')
+
+
 
 
 
@@ -229,20 +381,24 @@ for train_index, test_index in kf.split(training_data):
         elif row['STANCE'] == 'NIC':
             test[index + 20000] = text
 
-
-
-
     #print('Train shape = %s, test shape = %s' % (len(train), len(test)))
 
 
-    combined = train.values() + test.values()
+    #combined = train.values() + test.values()
+    #combined += idnes_data
 
-    combined = tokenize_data(combined)
+    #print('Combined data lenght = %s' % len(combined))
 
+    #combined = tokenize_data(combined)
+
+
+    '''
     print('Training w2v')
     model = Word2Vec(size=vocab_dim, min_count=n_exposures, window=window_size, workers=8, iter=n_iterations)
     model.build_vocab(combined)
     model.train(combined)
+    '''
+
 
     print('Transform data')
     index_dict, word_vectors, train, test = create_dictionaries(train, test, model)
@@ -296,139 +452,53 @@ for train_index, test_index in kf.split(training_data):
     y_train = np.array(y_train)
     y_test = np.array(y_test)
 
-    #print(y_test)
 
-
-    from keras.utils.np_utils import to_categorical
     y_train = to_categorical(y_train, nb_classes=3)
     y_test = to_categorical(y_test, nb_classes=3)
 
 
-    #print(y_test)
 
-    '''
-        PRO: 0+         y = 0   [1, 0, 0]
-        PROTI: 10k+     y = 1   [0, 1, 0]
-        NIC: 20k+       y = 2   [0, 0, 1]
-    '''
-
-    '''
-        [0 1 0 0 1 1 2 1 0 0 0 0 0 1 0 1 0 0 0 0 1 2 1 2 2 2 2 1 0 0 1 2 2 2 1 2 0
-        2 0 1 2 0 2 1 1 2 1 2 0 0 0 0 1 2 2 2 2 1 0 1 0 2 1 2 2 1 1 2 0 1 2 0 1 2
-        0 0 0 0 1 2 1 1]
-
-        [[ 1.  0.  0.]
-         [ 0.  1.  0.]
-         [ 1.  0.  0.]
-         [ 1.  0.  0.]
-         [ 0.  1.  0.]
-         [ 0.  1.  0.]
-         [ 0.  0.  1.]
-
-
-
-    '''
-
-    #quit()
 
     print('Keras model')
-    model = Sequential()
-    model.add(Embedding(output_dim=vocab_dim, input_dim=n_symbols, mask_zero=True, weights=[embedding_weights],
+    model_keras = Sequential()
+    model_keras.add(Embedding(output_dim=vocab_dim, input_dim=n_symbols, mask_zero=True, weights=[embedding_weights],
                         input_length=input_length))
-    model.add(LSTM(vocab_dim))
-    model.add(Dropout(0.3))
-    model.add(Dense(500, activation='relu'))
-    model.add(Dropout(0.3))
-    model.add(Dense(3, activation='softmax'))
-    model.summary()
+    model_keras.add(LSTM(vocab_dim))
+    model_keras.add(Dropout(0.3))
+    model_keras.add(Dense(500, activation='relu'))
+    model_keras.add(Dropout(0.3))
+    model_keras.add(Dense(3, activation='softmax'))
+    model_keras.summary()
 
     print('Compiling the model')
-    model.compile(optimizer='sgd', loss='categorical_crossentropy', metrics=['accuracy'])
+    model_keras.compile(optimizer='sgd', loss='categorical_crossentropy', metrics=['accuracy'])
 
     print('Train')
-    model.fit(X_training, y_train, batch_size=batch_size, nb_epoch=10, validation_data=(X_testing, y_test), shuffle=True)
+    model_keras.fit(X_training, y_train, batch_size=batch_size, nb_epoch=2, validation_data=(X_testing, y_test), shuffle=True)
 
     print('Evaluate')
-    score = model.evaluate(X_testing, y_test, batch_size=batch_size)
+    score = model_keras.evaluate(X_testing, y_test, batch_size=batch_size)
 
     print('Test score = ', score[0])
     print('Test accuracy = ', score[1])
 
-    predictions = model.predict(X_testing, batch_size=batch_size)
-
-    calculate_official_F1(predictions, y_test)
-    calculate_F1(predictions, y_test)
+    predictions = model_keras.predict(X_testing, batch_size=batch_size)
 
 
-    '''
-        PRO: 0+         y = 0   [1, 0, 0]
-        PROTI: 10k+     y = 1   [0, 1, 0]
-        NIC: 20k+       y = 2   [0, 0, 1]
-    '''
+    global_f1s_extended.append(calculate_F1(predictions, y_test))
+    global_f1s_official.append(calculate_official_F1(predictions, y_test))
 
 
 
 
-    #print(predictions)
-    #print(y_test)
+print('Official metric\n**************************')
+print('Partial F1s = %s' % (global_f1s_official))
+print('AVG F1 = %s, MAX F1 = %s, MIN F1 = %s' % (np.mean(global_f1s_official), max(global_f1s_official), min(global_f1s_official)))
 
 
-
-
-    '''
-
-        ('Test score = ', 1.0894851684570312)
-        ('Test accuracy = ', 0.42682927846908569)
-
-
-        [[ 0.22751626  0.49431086  0.27817288]
-         [ 0.232877    0.42299911  0.3441239 ]
-         [ 0.23288251  0.49463406  0.27248344]
-         [ 0.1930771   0.43628433  0.37063858]
-         [ 0.22060668  0.49519673  0.28419662]
-         [ 0.17618331  0.26554456  0.55827212]
-         [ 0.1630711   0.20678267  0.63014621]
-         [ 0.11682769  0.1781116   0.70506072]
-         [ 0.21800722  0.47195074  0.31004202]
-         [ 0.18343711  0.31076443  0.50579846]
-         [ 0.26254267  0.50547314  0.23198418]
-         [ 0.17322159  0.25158212  0.57519633]
-         [ 0.21544577  0.49395022  0.29060403]
-        ...
-         [ 0.23164202  0.52663332  0.24172467]
-         [ 0.23931545  0.49341056  0.26727399]
-         [ 0.21592641  0.46081516  0.32325843]
-         [ 0.17404373  0.22247408  0.60348219]
-         [ 0.14343174  0.28194168  0.57462662]
-         [ 0.24762119  0.3894203   0.36295852]]
-
-
-
-        [[ 1.  0.  0.]
-         [ 0.  1.  0.]
-         [ 1.  0.  0.]
-         [ 1.  0.  0.]
-         [ 0.  1.  0.]
-         [ 0.  1.  0.]
-         [ 0.  0.  1.]
-         [ 0.  1.  0.]
-         [ 1.  0.  0.]
-         [ 1.  0.  0.]
-        ...
-         [ 1.  0.  0.]
-         [ 1.  0.  0.]
-         [ 0.  1.  0.]
-         [ 0.  0.  1.]
-         [ 0.  1.  0.]
-         [ 0.  1.  0.]]
-
-    '''
-
-
-
-
-
-    #quit()
+print('Extended metric\n**************************')
+print('Partial F1s = %s' % (global_f1s_extended))
+print('AVG F1 = %s, MAX F1 = %s, MIN F1 = %s' % (np.mean(global_f1s_extended), max(global_f1s_extended), min(global_f1s_extended)))
 
 
 
@@ -443,6 +513,9 @@ quit()
 
 
 
+
+
+'''
 
 data_locations = {'data_zeman/NEU_test.txt': 'TEST_NEUTRAL',
                   'data_zeman/NEU_train.txt': 'TRAIN_NEUTRAL',
@@ -574,9 +647,11 @@ for word, index in index_dict.items():
 
 print('Creating dataset')
 '''
+'''
 AGAINST 0 - 9999
 FAVOR 10000+
 NEUTRAL 20000+
+'''
 '''
 X_train = train.values()
 #y_train = [1 if value > 10000  else 0 for value in train.keys()]
@@ -636,7 +711,7 @@ print('Compiling the model')
 model.compile(optimizer='sgd', loss='categorical_crossentropy', metrics=['accuracy'])
 
 print('Train')
-model.fit(X_train, y_train, batch_size=batch_size, nb_epoch=100, validation_data=(X_test, y_test), shuffle=True)
+model.fit(X_train, y_train, batch_size=batch_size, nb_epoch=5, validation_data=(X_test, y_test), shuffle=True)
 
 print('Evaluate')
 score = model.evaluate(X_test, y_test, batch_size=batch_size)
@@ -651,9 +726,4 @@ print(predictions)
 print(y_test)
 
 
-
-
-
-
-
-
+'''
